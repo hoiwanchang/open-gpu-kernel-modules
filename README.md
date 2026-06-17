@@ -62,6 +62,83 @@ These variables can be set on the make command line.  E.g.,
     make modules -j$(nproc) NV_VERBOSE=1
 
 
+## Experimental PCIe P2P Override for Unsupported Chipsets
+
+> **⚠ WARNING – FOR LOCAL TESTING ONLY.**  Data-transfer correctness over
+> PCIe P2P on unsupported chipsets/CPUs is NOT guaranteed.  Do **not** use
+> these modules in a production environment.
+
+This fork includes an experimental compile-time flag,
+`NV_EXPERIMENTAL_FORCE_PCIE_P2P`, that relaxes two PCIe P2P capability
+gates that would otherwise cause the driver to report
+`CNS / Chipset Not Supported` on consumer platforms such as a system with
+four GeForce RTX 3080 Ti GPUs:
+
+1. **ChipsetInitialized gate** (`_kp2pCapsGetStatusOverPcie`):  
+   When the driver's PCIe topology scan does not recognize the host
+   chipset, it normally hard-fails with `NOT_SUPPORTED`.  With the flag
+   enabled, this check is bypassed and a kernel warning is emitted
+   instead, allowing capability detection to continue.
+
+2. **CPU whitelist gate** (`_p2pCapsGetHostSystemStatusOverPcieBar1`):  
+   BAR1 P2P read capability is normally limited to AMD Ryzen and Intel
+   Xeon SPR platforms.  With the flag enabled, unrecognized CPU types are
+   allowed through with a kernel warning.
+
+The flag is **enabled by default** in `src/nvidia/Makefile` for this
+branch.  To disable it (restore stock behavior), remove the line:
+
+    CFLAGS += -DNV_EXPERIMENTAL_FORCE_PCIE_P2P
+
+from `src/nvidia/Makefile` before building.
+
+### Building with the experimental override
+
+Prerequisites: kernel headers, GCC/Clang, make.
+
+    # 1. Build the RM object and kernel modules
+    make modules -j$(nproc)
+
+    # 2. Install (run as root, after unloading existing NVIDIA modules)
+    make modules_install -j$(nproc)
+
+    # 3. Reload the modules
+    modprobe nvidia
+    modprobe nvidia-uvm
+
+### Verifying P2P capability
+
+After loading the new modules, check the P2P topology:
+
+    nvidia-smi topo -m
+
+With the override active you should see the P2P status change from `CNS`
+to a non-error value (e.g. `SYS` or `PHB`).  You can also query directly:
+
+    # Check with nvidia-smi nvlink / peer status
+    nvidia-smi --query-gpu=index,name --format=csv
+
+To observe the experimental override log messages, check `dmesg`:
+
+    dmesg | grep -i "P2P EXPERIMENTAL OVERRIDE"
+
+### Runtime ForceP2P registry key (alternative approach)
+
+As an alternative to recompiling, NVIDIA drivers also support a
+`ForceP2P` registry key that can force-enable or disable P2P capability
+at runtime.  To force both read and write P2P capability on all GPUs,
+add the following to `/etc/modprobe.d/nvidia.conf`:
+
+    options nvidia NVreg_RegistryDwords="ForceP2P=0x11"
+
+Value bit-fields:
+- bits 1:0 – read cap: `0x00` = disable, `0x01` = enable, `0x02` = default
+- bits 5:4 – write cap: `0x00` = disable, `0x01` = enable, `0x02` = default
+
+`ForceP2P=0x11` enables both read and write and bypasses the
+`ChipsetInitialized` gate without recompiling.
+
+
 ## Supported Toolchains
 
 Any reasonably modern version of GCC or Clang can be used to build the

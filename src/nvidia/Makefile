@@ -137,6 +137,19 @@ CFLAGS += -DNV_PRINTF_STRINGS_ALLOWED=1
 CFLAGS += -DNV_ASSERT_FAILED_USES_STRINGS=1
 CFLAGS += -DPORT_ASSERT_FAILED_USES_STRINGS=1
 
+#
+# EXPERIMENTAL: Force-enable PCIe P2P capability detection on platforms where
+# the chipset is not in the NVIDIA whitelist (e.g. consumer motherboards with
+# four GeForce RTX 3080 Ti GPUs).  This bypasses the ChipsetInitialized gate
+# in _kp2pCapsGetStatusOverPcie and the CPU-type whitelist in
+# _p2pCapsGetHostSystemStatusOverPcieBar1.
+#
+# WARNING: This flag is intended for local testing ONLY.  Data-transfer
+# correctness over PCIe P2P on unsupported chipsets is NOT guaranteed.
+# Remove this flag before using these modules in a production environment.
+#
+CFLAGS += -DNV_EXPERIMENTAL_FORCE_PCIE_P2P
+
 ifeq ($(DEBUG),1)
   CFLAGS += -gsplit-dwarf
 endif
