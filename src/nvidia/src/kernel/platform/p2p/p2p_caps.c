@@ -397,9 +397,26 @@ _kp2pCapsGetStatusOverPcie
     // If the PCIE topology cannot be accessed do not allow P2P
     if (!pCl->ChipsetInitialized)
     {
+#if defined(NV_EXPERIMENTAL_FORCE_PCIE_P2P)
+        //
+        // EXPERIMENTAL OVERRIDE (NV_EXPERIMENTAL_FORCE_PCIE_P2P):
+        // The chipset was not recognized / PCIe topology scan did not
+        // complete, but we bypass this gate for local P2P testing on
+        // unsupported platforms (e.g. GeForce RTX 3080 Ti with a
+        // non-whitelisted chipset).  Data-transfer correctness is NOT
+        // guaranteed.  Remove this build flag before deploying in
+        // production.
+        //
+        NV_PRINTF(LEVEL_WARNING,
+                  "P2P EXPERIMENTAL OVERRIDE: ChipsetInitialized is NV_FALSE "
+                  "(chipset not recognized or PCIe topology scan failed). "
+                  "Bypassing gate for local testing - PCIe P2P data "
+                  "correctness NOT guaranteed.\n");
+#else
         *pP2PReadCapStatus = NV0000_P2P_CAPS_STATUS_NOT_SUPPORTED;
         *pP2PWriteCapStatus= NV0000_P2P_CAPS_STATUS_NOT_SUPPORTED;
         goto done;
+#endif
     }
 
     // PCI-E topology checks
@@ -612,8 +629,25 @@ _p2pCapsGetHostSystemStatusOverPcieBar1
     }
     else
     {
+#if defined(NV_EXPERIMENTAL_FORCE_PCIE_P2P)
+        //
+        // EXPERIMENTAL OVERRIDE (NV_EXPERIMENTAL_FORCE_PCIE_P2P):
+        // CPU type 0x%x is not in the BAR1 P2P read-capability whitelist
+        // (Ryzen / Xeon SPR), but we force-enable read capability for
+        // local testing on unsupported platforms.  Data-transfer
+        // correctness is NOT guaranteed.  Remove this build flag before
+        // deploying in production.
+        //
+        NV_PRINTF(LEVEL_WARNING,
+                  "P2P EXPERIMENTAL OVERRIDE: CPU type 0x%x not in BAR1 P2P "
+                  "read-cap whitelist. Overriding to OK for local testing - "
+                  "PCIe P2P data correctness NOT guaranteed.\n",
+                  pSys->cpuInfo.type);
+        *pP2PReadCapStatus = NV0000_P2P_CAPS_STATUS_OK;
+#else
         *pP2PReadCapStatus = NV0000_P2P_CAPS_STATUS_CHIPSET_NOT_SUPPORTED;
         NV_PRINTF(LEVEL_INFO, "Unrecognized CPU. Read Cap is disabled\n");
+#endif
     }
 
     return NV_OK;
