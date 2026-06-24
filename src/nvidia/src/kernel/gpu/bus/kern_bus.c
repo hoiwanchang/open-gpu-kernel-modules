@@ -192,7 +192,15 @@ kbusInitRegistryOverrides(OBJGPU *pGpu, KernelBus *pKernelBus)
     }
     else
     {
-        pKernelBus->staticBar1ForceType = NV_REG_STR_RM_FORCE_STATIC_BAR1_DEFAULT;
+        //
+        // tinygrad p2p patch: default to ENABLE instead of ONLY_GPU so that
+        // consumer Ampere GPUs (GA102 / RTX 30xx) can activate static BAR1
+        // without being gated by the "only enable for specific GPU models"
+        // logic.  The size check in kbusIsStaticBar1Supported_TU102 is also
+        // relaxed to handle small BAR1 apertures on consumer cards.
+        //
+        pKernelBus->staticBar1ForceType = NV_REG_STR_RM_FORCE_STATIC_BAR1_ENABLE;
+        // pKernelBus->staticBar1ForceType = NV_REG_STR_RM_FORCE_STATIC_BAR1_DEFAULT;
     }
 
     //

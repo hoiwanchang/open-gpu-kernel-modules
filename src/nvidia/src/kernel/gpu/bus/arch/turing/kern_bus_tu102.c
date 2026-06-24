@@ -412,22 +412,22 @@ kbusIsStaticBar1Supported_TU102
     if (pKernelBus->staticBar1ForceType == NV_REG_STR_RM_FORCE_STATIC_BAR1_ENABLE)
     {
         //
-        // Only check for at least client-visible FB size on the assumption the user
-        // really wants to enable static BAR1 regardless of the auto checks
+        // tinygrad p2p patch: skip the BAR1 vs FB size check for consumer GPUs
+        // that have a small default BAR1 (256 MB) but large VRAM (e.g. 12 GB).
+        // kbusEnableStaticBar1Mapping_TU102 uses memmgrGetClientFbAddrSpaceSize
+        // which reflects the actual mapped window size, so it will correctly
+        // limit the mapping to whatever BAR1 aperture is available.
         //
-        NvU64 bar1MapSize =
-            RM_ALIGN_UP(memmgrGetClientFbAddrSpaceSize(pGpu, pMemoryManager),
-                        RM_PAGE_SIZE_2M);
-
-        if (bar1VASizeAligned < bar1MapSize)
-        {
-            NV_PRINTF(LEVEL_ERROR, "BAR1 size %lld is not large enough to map FB size"
-                                   "%lld to force static BAR1\n",
-                                    bar1VASizeAligned, bar1MapSize);
-            DBG_BREAKPOINT();
-
-            return NV_ERR_INVALID_REGISTRY_KEY;
-        }
+        // Original check (kept for reference):
+        // NvU64 bar1MapSize =
+        //     RM_ALIGN_UP(memmgrGetClientFbAddrSpaceSize(pGpu, pMemoryManager),
+        //                 RM_PAGE_SIZE_2M);
+        // if (bar1VASizeAligned < bar1MapSize)
+        // {
+        //     NV_PRINTF(LEVEL_ERROR, ...);
+        //     DBG_BREAKPOINT();
+        //     return NV_ERR_INVALID_REGISTRY_KEY;
+        // }
 
         return NV_OK;
     }
@@ -472,9 +472,21 @@ kbusIsStaticBar1Supported_TU102
     if (pKernelBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_BAR1P2P)
         return NV_ERR_NOT_SUPPORTED;
 
-    if ((bar1VASize < (doorbellAndMmioPrivSize)) ||
-        ((bar1VASize - (doorbellAndMmioPrivSize)) < fbSizeAligned))
-        return NV_ERR_NOT_SUPPORTED;
+    //
+    // tinygrad p2p patch: allow BAR1 P2P even if BAR1 is smaller than VRAM.
+    // Consumer GPUs (e.g. GA102 / RTX 3080 Ti) have a small default BAR1
+    // (256 MB) while having large VRAM (12 GB+).  The original check below
+    // would reject static BAR1 for such cards.  We skip the size check here
+    // and rely on kbusEnableStaticBar1Mapping_TU102 to map only the
+    // client-visible FB region (memmgrGetClientFbAddrSpaceSize) which
+    // correctly reflects the resizable-BAR aperture actually exported by the
+    // BIOS/PCIe config.  If BAR1 is truly too small the memdescCreate /
+    // kbusMapFbApertureSingle calls in that function will fail safely.
+    //
+    // Original check (kept for reference):
+    // if ((bar1VASize < (doorbellAndMmioPrivSize)) ||
+    //     ((bar1VASize - (doorbellAndMmioPrivSize)) < fbSizeAligned))
+    //     return NV_ERR_NOT_SUPPORTED;
 
     return NV_OK;
 }
